@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import re
 from nltk import word_tokenize
 from nltk.stem import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
@@ -61,8 +62,16 @@ df2['Sentiment']=0
 #Join positive and negative into one test dataframe
 df_test = df1.append(df2)
 
+df.columns = ['Review', 'Sentiment']
+df_test.columns = ['Review', 'Sentiment']
+
+#remove non alphanumeric
+df['Review'] =  df['Review'].apply(lambda x: re.sub("[^a-zA-Z]",' ', str(x)))
+df_test['Review'] =  df_test['Review'].apply(lambda x: re.sub("[^a-zA-Z]",' ', str(x)))
+print(df['Review'].head())
+
 #Tokenize Reviews in training
-tokened_reviews = [word_tokenize(rev) for rev in df[0]]
+tokened_reviews = [word_tokenize(rev) for rev in df['Review']]
 #Create word stems
 stemmed_tokens = []
 porter = PorterStemmer()
@@ -72,7 +81,7 @@ for i in range(len(tokened_reviews)):
   stemmed_tokens.append(stems)
 df.insert(1, column='Stemmed', value=stemmed_tokens)
 #Tokenize Review in Test
-tokened_reviews_test = [word_tokenize(rev) for rev in df_test[0]]
+tokened_reviews_test = [word_tokenize(rev) for rev in df_test['Review']]
 #Create word stems
 stemmed_tokens_test = []
 porter = PorterStemmer()
@@ -82,11 +91,8 @@ for i in range(len(tokened_reviews_test)):
   stemmed_tokens_test.append(stems)
 df_test.insert(1, column='Stemmed', value=stemmed_tokens_test)
 
-df.columns = ['Review', 'Stemmed', 'Sentiment']
-df_test.columns = ['Review', 'Stemmed', 'Sentiment']
-
 #Create unstemmed BOW features for training set
-vect = CountVectorizer(max_features=100, ngram_range=(1,3), stop_words=ENGLISH_STOP_WORDS)
+vect = CountVectorizer(max_features=10000, ngram_range=(1,3), stop_words=ENGLISH_STOP_WORDS)
 vectFit = vect.fit(df['Review'])
 BOW = vectFit.transform(df['Review'])
 BOW_df=pd.DataFrame(BOW.toarray(), columns=vect.get_feature_names())
@@ -97,7 +103,7 @@ BOW_test_df=pd.DataFrame(BOW_test.toarray(), columns=vect.get_feature_names())
 #print("BOW:  ", BOW_df.shape)
 
 #Create stemmed BOW features for training set
-vect = CountVectorizer(max_features=100, ngram_range=(1,3), stop_words=ENGLISH_STOP_WORDS)
+vect = CountVectorizer(max_features=10000, ngram_range=(1,3), stop_words=ENGLISH_STOP_WORDS)
 vectFit = vect.fit(df['Stemmed'])
 BOW_stemmed = vectFit.transform(df['Stemmed'])
 BOW_stemmed_df=pd.DataFrame(BOW_stemmed.toarray(), columns=vect.get_feature_names())
@@ -108,7 +114,7 @@ BOW_stemmed_test_df=pd.DataFrame(BOW_stemmed_test.toarray(), columns=vect.get_fe
 #print("BOW:  ", BOW_df.shape)
 
 #Create TfIdf features
-Tfidf = TfidfVectorizer(ngram_range=(1,2), max_features=100, stop_words=ENGLISH_STOP_WORDS)
+Tfidf = TfidfVectorizer(ngram_range=(1,3), max_features=10000, stop_words=ENGLISH_STOP_WORDS)
 Tfidf_fit = Tfidf.fit(df['Review'])
 Tfidf_trans = Tfidf_fit.transform(df['Review'])
 Tfidf_df = pd.DataFrame(Tfidf_trans.toarray(), columns=Tfidf.get_feature_names())
@@ -119,7 +125,7 @@ labels_training = df['Sentiment']
 labels_testing = df_test['Sentiment']
 
 #Create TfIdf stemmed features
-Tfidf = TfidfVectorizer(ngram_range=(1,2), max_features=100, stop_words=ENGLISH_STOP_WORDS)
+Tfidf = TfidfVectorizer(ngram_range=(1,3), max_features=10000, stop_words=ENGLISH_STOP_WORDS)
 Tfidf_stemmed_fit = Tfidf.fit(df['Stemmed'])
 Tfidf_stemmed_trans = Tfidf_stemmed_fit.transform(df['Stemmed'])
 Tfidf_stemmed_df = pd.DataFrame(Tfidf_stemmed_trans.toarray(), columns=Tfidf.get_feature_names())
@@ -163,7 +169,6 @@ Tfidf_stemmed_df_test.insert(0, column='Lengths', value=len_tokens_test)
 labels_training = df['Sentiment']
 labels_testing = df_test['Sentiment']
 
-print(df.columns)
 # Build a logistic regression model and calculate the accuracy
 log_reg = LogisticRegression().fit(BOW_df, labels_training)
 print('Accuracy of logistic regression (BOW features): ', log_reg.score(BOW_df, labels_training))
@@ -181,5 +186,6 @@ print('Accuracy of logistic regression test (Tfidf features): ', log_reg.score(T
 
 # Build a logistic regression model and calculate the accuracy on Tfidf stemmed
 log_reg = LogisticRegression().fit(Tfidf_stemmed_df, labels_training)
-print('Accuracy of logistic regression (Tfidf Stemmed features): ', log_reg.score(Tfidf_stemmed_df , labels_training))
+print('Accuracy of logistic regression (Tfidf Stemmed features): ', log_reg.score(Tfidf_stemmed_df, labels_training))
 print('Accuracy of logistic regression test (Tfidf Stemmed features): ', log_reg.score(Tfidf_stemmed_df_test, labels_testing))
+
