@@ -1,8 +1,9 @@
 import os
 import pandas as pd
-from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
 from nltk import word_tokenize
 from nltk.stem import PorterStemmer
+from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
+from sklearn import preprocessing
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 
@@ -126,10 +127,41 @@ Tfidf_stemmed_df = pd.DataFrame(Tfidf_stemmed_trans.toarray(), columns=Tfidf.get
 Tfidf_stemmed_trans_test = Tfidf_stemmed_fit.transform(df_test['Stemmed'])
 Tfidf_stemmed_df_test = pd.DataFrame(Tfidf_stemmed_trans_test.toarray(), columns=Tfidf.get_feature_names())
 
+#Other features of value
+tokened_reviews = [word_tokenize(rev) for rev in df['Review']]
+tokened_reviews_test = [word_tokenize(rev) for rev in df_test['Review']]
+# Create feature that measures length of reviews
+len_tokens = []
+for i in range(len(tokened_reviews)):
+     len_tokens.append(len(tokened_reviews[i]))
+# Create feature that measures length of test reviews
+len_tokens_test = []
+for i in range(len(tokened_reviews_test)):
+     len_tokens_test.append(len(tokened_reviews[i]))
+
+len_tokens = preprocessing.scale(len_tokens)
+len_tokens_test = preprocessing.scale(len_tokens_test)
+
+#Create average word length (training)
+Average_Words = [len(x)/(len(x.split())) for x in df['Review'].tolist()]
+Average_Words = preprocessing.scale(Average_Words)
+Tfidf_stemmed_df['averageWords'] = Average_Words
+#Average word length in test
+Average_Words_Test = [(len(x)/len(x.split())) for x in df_test['Review'].tolist()]
+Average_Words_Test = preprocessing.scale(Average_Words_Test)
+Tfidf_stemmed_df_test['averageWords'] = Average_Words_Test
+
+BOW_stemmed_df['averageWords'] = Average_Words
+BOW_stemmed_test_df['averageWords'] = Average_Words_Test
+
+BOW_df.insert(0, column='Lengths', value=len_tokens)
+BOW_test_df.insert(0, column='Lengths', value = len_tokens_test)
+
+Tfidf_stemmed_df.insert(0, column='Lengths', value=len_tokens)
+Tfidf_stemmed_df_test.insert(0, column='Lengths', value=len_tokens_test)
+
 labels_training = df['Sentiment']
 labels_testing = df_test['Sentiment']
-
-
 
 print(df.columns)
 # Build a logistic regression model and calculate the accuracy
