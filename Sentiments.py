@@ -170,22 +170,22 @@ labels_training = df['Sentiment']
 labels_testing = df_test['Sentiment']
 
 # Build a logistic regression model and calculate the accuracy
-log_reg = LogisticRegression().fit(BOW_df, labels_training)
+log_reg = LogisticRegression(C = 30).fit(BOW_df, labels_training)
 print('Accuracy of logistic regression (BOW features): ', log_reg.score(BOW_df, labels_training))
 print('Accuracy of logistic regression test (BOW features): ', log_reg.score(BOW_test_df, labels_testing))
 
 # Build a logistic regression model and calculate the accuracy
-log_reg = LogisticRegression().fit(BOW_stemmed_df, labels_training)
+log_reg = LogisticRegression(C = 30).fit(BOW_stemmed_df, labels_training)
 print('Accuracy of logistic regression (stemmed BOW features): ', log_reg.score(BOW_stemmed_df, labels_training))
 print('Accuracy of logistic regression test (stemmed BOW features): ', log_reg.score(BOW_stemmed_test_df, labels_testing))
 
 # Build a logistic regression model and calculate the accuracy on Tfidf
-log_reg = LogisticRegression().fit(Tfidf_df, labels_training)
+log_reg = LogisticRegression(C = 30).fit(Tfidf_df, labels_training)
 print('Accuracy of logistic regression (Tfidf features): ', log_reg.score(Tfidf_df, labels_training))
 print('Accuracy of logistic regression test (Tfidf features): ', log_reg.score(Tfidf_df_test, labels_testing))
 
 # Build a logistic regression model and calculate the accuracy on Tfidf stemmed
-log_reg = LogisticRegression().fit(Tfidf_stemmed_df, labels_training)
+log_reg = LogisticRegression(C = 30).fit(Tfidf_stemmed_df, labels_training)
 print('Accuracy of logistic regression (Tfidf Stemmed features): ', log_reg.score(Tfidf_stemmed_df, labels_training))
 print('Accuracy of logistic regression test (Tfidf Stemmed features): ', log_reg.score(Tfidf_stemmed_df_test, labels_testing))
 
