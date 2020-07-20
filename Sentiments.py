@@ -8,184 +8,137 @@ from sklearn import preprocessing
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 
-#Load training and test sets
-#load positive reviews into DF
-dir = '/home/ilan/aclImdb/train/ttP'
-os.chdir(dir)
-data = []
-files = [file for file in os.listdir(dir) if os.path.isfile(file)]
-for file in files:
-  with open (file, "r") as myfile:
-    data.append(myfile.read())
+# Nice to see additional metrics
+from sklearn.metrics import classification_report
 
-df1 = pd.DataFrame(data)
-df1['Sentiment']=1
+# Defining your constants up top to change easily
+path_training = '/home/ilan/aclImdb/train'
+path_testing = '/home/ilan/aclImdb/test'
 
-#load negative reviews into DF
-dir = '/home/ilan/aclImdb/train/ttN'
-os.chdir(dir)
-data = []
-files = [file for file in os.listdir(dir) if os.path.isfile(file)]
-for file in files:
-  with open (file, "r") as myfile:
-    data.append(myfile.read())
+def load_data(dir):
+    # Open and import positve data
+    posDir = os.chdir(dir + '/pos')
+    df1 = files_to_DF(posDir)
+    df1['Sentiment'] = 1  # Setting whether it is a pos or neg review
+    # Open and import negative data
+    negDir = os.chdir(dir + '/neg')
+    df2 = files_to_DF(negDir)
+    df2['Sentiment'] = 0  # Setting whether it is a pos or neg review
+    #join positive and negative into a dataframe
+    df = df1.append(df2)
 
-df2 = pd.DataFrame(data)
-df2['Sentiment']=0
-#Join positive and negative into same dataframe
-df = df1.append(df2)
+    df.columns = ['Review', 'Sentiment']  # Labeling columns
+    # Remove non-alphanumeric characters
+    df['Review'] = df['Review'].apply(lambda x: re.sub("[^a-zA-Z]", ' ', str(x)))
+    # Tokenize the training and testing data
+    df_tokenized = tokenize_review(df)
+    return df_tokenized
 
-#load positive reviews into test DF
-dir = '/home/ilan/aclImdb/test/testPos'
-os.chdir(dir)
+def files_to_DF(dir):
+    data = []
+    files = [file for file in os.listdir(dir) if os.path.isfile(file)]
+    for file in files:
+        with open(file, "r") as myfile:
+            data.append(myfile.read())
+    df = pd.DataFrame(data)
+    return df
 
-data_test = []
-files = [file for file in os.listdir(dir) if os.path.isfile(file)]
-for file in files:
-  with open (file, "r") as myfile:
-    data_test.append(myfile.read())
+def tokenize_review(df):
+    # Tokenize Reviews in training
+    tokened_reviews = [word_tokenize(rev) for rev in df['Review']]
+    # Create word stems
+    stemmed_tokens = []
+    porter = PorterStemmer()
+    for i in range(len(tokened_reviews)):
+        stems = [porter.stem(token) for token in tokened_reviews[i]]
+        stems = ' '.join(stems)
+        stemmed_tokens.append(stems)
+    df.insert(1, column='Stemmed', value=stemmed_tokens)
+    return df
 
-df1 = pd.DataFrame(data_test)
-df1['Sentiment']=1
+def transform_BOW(training, testing, stemmed_or_unstemmed):
+    vect = CountVectorizer(max_features=10000, ngram_range=(1,3), stop_words=ENGLISH_STOP_WORDS)
+    vectFit = vect.fit(training[stemmed_or_unstemmed])
+    BOW_training = vectFit.transform(training[stemmed_or_unstemmed])
+    BOW_training_df = pd.DataFrame(BOW_training.toarray(), columns=vect.get_feature_names())
+    BOW_testing = vectFit.transform(testing[stemmed_or_unstemmed])
+    BOW_testing_Df = pd.DataFrame(BOW_testing.toarray(), columns=vect.get_feature_names())
+    return BOW_training_df, BOW_testing_Df
 
-#load negative reviews into test DF
-dir = '/home/ilan/aclImdb/test/testNeg'
-os.chdir(dir)
-data_test = []
-files = [file for file in os.listdir(dir) if os.path.isfile(file)]
-for file in files:
-  with open (file, "r") as myfile:
-    data_test.append(myfile.read())
+def transform_tfidf(training, testing, stemmed_or_unstemmed):
+    Tfidf = TfidfVectorizer(ngram_range=(1,3), max_features=10000, stop_words=ENGLISH_STOP_WORDS)
+    Tfidf_fit = Tfidf.fit(training[stemmed_or_unstemmed])
+    Tfidf_training = Tfidf_fit.transform(training[stemmed_or_unstemmed])
+    Tfidf_training_df = pd.DataFrame(Tfidf_training.toarray(), columns=Tfidf.get_feature_names())
+    Tfidf_testing = Tfidf_fit.transform(testing[stemmed_or_unstemmed])
+    Tfidf_testing_df = pd.DataFrame(Tfidf_testing.toarray(), columns=Tfidf.get_feature_names())
+    return Tfidf_training_df, Tfidf_testing_df
 
-df2 = pd.DataFrame(data_test)
-df2['Sentiment']=0
-#Join positive and negative into one test dataframe
-df_test = df1.append(df2)
+def add_augmenting_features(df):
+    tokened_reviews = [word_tokenize(rev) for rev in df['Review']]
+    # Create feature that measures length of reviews
+    len_tokens = []
+    for i in range(len(tokened_reviews)):
+        len_tokens.append(len(tokened_reviews[i]))
+    len_tokens = preprocessing.scale(len_tokens)
+    df.insert(0, column='Lengths', value=len_tokens)
 
-df.columns = ['Review', 'Sentiment']
-df_test.columns = ['Review', 'Sentiment']
+    # Create average word length (training)
+    Average_Words = [len(x)/(len(x.split())) for x in df['Review'].tolist()]
+    Average_Words = preprocessing.scale(Average_Words)
+    df['averageWords'] = Average_Words
+    return df
 
-#remove non alphanumeric
-df['Review'] =  df['Review'].apply(lambda x: re.sub("[^a-zA-Z]",' ', str(x)))
-df_test['Review'] =  df_test['Review'].apply(lambda x: re.sub("[^a-zA-Z]",' ', str(x)))
-print(df['Review'].head())
+def build_model(X_train, y_train, X_test, y_test, name_of_test):
+    log_reg = LogisticRegression(C=30).fit(X_train, y_train)
+    y_pred = log_reg.predict(X_test)
+    print('Training accuracy of '+name_of_test+': ', log_reg.score(X_train, y_train))
+    print('Testing accuracy of '+name_of_test+': ', log_reg.score(X_test, y_test))
+    print(classification_report(y_test, y_pred))  # Evaluating prediction ability
 
-#Tokenize Reviews in training
-tokened_reviews = [word_tokenize(rev) for rev in df['Review']]
-#Create word stems
-stemmed_tokens = []
-porter = PorterStemmer()
-for i in range(len(tokened_reviews)):
-  stems = [porter.stem(token) for token in tokened_reviews[i]]
-  stems = ' '.join(stems)
-  stemmed_tokens.append(stems)
-df.insert(1, column='Stemmed', value=stemmed_tokens)
-#Tokenize Review in Test
-tokened_reviews_test = [word_tokenize(rev) for rev in df_test['Review']]
-#Create word stems
-stemmed_tokens_test = []
-porter = PorterStemmer()
-for i in range(len(tokened_reviews_test)):
-  stems = [porter.stem(token) for token in tokened_reviews_test[i]]
-  stems = ' '.join(stems)
-  stemmed_tokens_test.append(stems)
-df_test.insert(1, column='Stemmed', value=stemmed_tokens_test)
+# Load training and test sets
+# Loading reviews into DF
+df_train = load_data(path_training)
 
-#Create unstemmed BOW features for training set
-vect = CountVectorizer(max_features=10000, ngram_range=(1,3), stop_words=ENGLISH_STOP_WORDS)
-vectFit = vect.fit(df['Review'])
-BOW = vectFit.transform(df['Review'])
-BOW_df=pd.DataFrame(BOW.toarray(), columns=vect.get_feature_names())
+print('...successfully loaded training data')
+print('Total length of training data: ', len(df_train))
+# Add augmenting features
+df_train = add_augmenting_features(df_train)
+print('...augmented data with len_tokens and average_words')
+# print(df_train.head())
 
-#Create unstemmed BOW features for test set
-BOW_test = vectFit.transform(df_test['Review'])
-BOW_test_df=pd.DataFrame(BOW_test.toarray(), columns=vect.get_feature_names())
-#print("BOW:  ", BOW_df.shape)
+# Load test DF
+df_test = load_data(path_testing)
 
-#Create stemmed BOW features for training set
-vect = CountVectorizer(max_features=10000, ngram_range=(1,3), stop_words=ENGLISH_STOP_WORDS)
-vectFit = vect.fit(df['Stemmed'])
-BOW_stemmed = vectFit.transform(df['Stemmed'])
-BOW_stemmed_df=pd.DataFrame(BOW_stemmed.toarray(), columns=vect.get_feature_names())
+print('...successfully loaded testing data')
+print('Total length of testing data: ', len(df_test))
+# Add augmenting features
+df_test = add_augmenting_features(df_test)
+print('...augmented data with len_tokens and average_words')
+# print(df_test.head())
 
-#Create stemmed BOW features for test set
-BOW_stemmed_test = vectFit.transform(df_test['Stemmed'])
-BOW_stemmed_test_df=pd.DataFrame(BOW_stemmed_test.toarray(), columns=vect.get_feature_names())
-#print("BOW:  ", BOW_df.shape)
+# Create unstemmed BOW features for training set
+df_train_bow_unstem, df_test_bow_unstem = transform_BOW(df_train, df_test, 'Review')
+print('...successfully created the unstemmed BOW data')
 
-#Create TfIdf features
-Tfidf = TfidfVectorizer(ngram_range=(1,3), max_features=10000, stop_words=ENGLISH_STOP_WORDS)
-Tfidf_fit = Tfidf.fit(df['Review'])
-Tfidf_trans = Tfidf_fit.transform(df['Review'])
-Tfidf_df = pd.DataFrame(Tfidf_trans.toarray(), columns=Tfidf.get_feature_names())
-#For Testset
-Tfidf_trans_test = Tfidf_fit.transform(df_test['Review'])
-Tfidf_df_test = pd.DataFrame(Tfidf_trans_test.toarray(), columns=Tfidf.get_feature_names())
-labels_training = df['Sentiment']
-labels_testing = df_test['Sentiment']
+# Create stemmed BOW features for training set
+df_train_bow_stem, df_test_bow_stem = transform_BOW(df_train, df_test, 'Stemmed')
+print('...successfully created the stemmed BOW data')
 
-#Create TfIdf stemmed features
-Tfidf = TfidfVectorizer(ngram_range=(1,3), max_features=10000, stop_words=ENGLISH_STOP_WORDS)
-Tfidf_stemmed_fit = Tfidf.fit(df['Stemmed'])
-Tfidf_stemmed_trans = Tfidf_stemmed_fit.transform(df['Stemmed'])
-Tfidf_stemmed_df = pd.DataFrame(Tfidf_stemmed_trans.toarray(), columns=Tfidf.get_feature_names())
-#For Testset
-Tfidf_stemmed_trans_test = Tfidf_stemmed_fit.transform(df_test['Stemmed'])
-Tfidf_stemmed_df_test = pd.DataFrame(Tfidf_stemmed_trans_test.toarray(), columns=Tfidf.get_feature_names())
+print('...successfully created the stemmed BOW data')
 
-#Other features of value
-tokened_reviews = [word_tokenize(rev) for rev in df['Review']]
-tokened_reviews_test = [word_tokenize(rev) for rev in df_test['Review']]
-# Create feature that measures length of reviews
-len_tokens = []
-for i in range(len(tokened_reviews)):
-     len_tokens.append(len(tokened_reviews[i]))
-# Create feature that measures length of test reviews
-len_tokens_test = []
-for i in range(len(tokened_reviews_test)):
-     len_tokens_test.append(len(tokened_reviews[i]))
+# Create TfIdf features for training set
+df_train_tfidf_unstem, df_test_tfidf_unstem = transform_tfidf(df_train, df_test, 'Review')
+print('...successfully created the unstemmed TFIDF data')
 
-len_tokens = preprocessing.scale(len_tokens)
-len_tokens_test = preprocessing.scale(len_tokens_test)
+# Create TfIdf features for training set
+df_train_tfidf_stem, df_test_tfidf_stem = transform_tfidf(df_train, df_test, 'Stemmed')
 
-#Create average word length (training)
-Average_Words = [len(x)/(len(x.split())) for x in df['Review'].tolist()]
-Average_Words = preprocessing.scale(Average_Words)
-Tfidf_stemmed_df['averageWords'] = Average_Words
-#Average word length in test
-Average_Words_Test = [(len(x)/len(x.split())) for x in df_test['Review'].tolist()]
-Average_Words_Test = preprocessing.scale(Average_Words_Test)
-Tfidf_stemmed_df_test['averageWords'] = Average_Words_Test
+print('...successfully created the stemmed TFIDF data')
 
-BOW_stemmed_df['averageWords'] = Average_Words
-BOW_stemmed_test_df['averageWords'] = Average_Words_Test
+# Running logistic regression on dataframes
+build_model(df_train_bow_unstem, df_train['Sentiment'], df_test_bow_unstem, df_test['Sentiment'], 'BOW Unstemmed')
+build_model(df_train_bow_stem, df_train['Sentiment'], df_test_bow_stem, df_test['Sentiment'], 'BOW Stemmed')
 
-BOW_df.insert(0, column='Lengths', value=len_tokens)
-BOW_test_df.insert(0, column='Lengths', value = len_tokens_test)
-
-Tfidf_stemmed_df.insert(0, column='Lengths', value=len_tokens)
-Tfidf_stemmed_df_test.insert(0, column='Lengths', value=len_tokens_test)
-
-labels_training = df['Sentiment']
-labels_testing = df_test['Sentiment']
-
-# Build a logistic regression model and calculate the accuracy
-log_reg = LogisticRegression(C = 30).fit(BOW_df, labels_training)
-print('Accuracy of logistic regression (BOW features): ', log_reg.score(BOW_df, labels_training))
-print('Accuracy of logistic regression test (BOW features): ', log_reg.score(BOW_test_df, labels_testing))
-
-# Build a logistic regression model and calculate the accuracy
-log_reg = LogisticRegression(C = 30).fit(BOW_stemmed_df, labels_training)
-print('Accuracy of logistic regression (stemmed BOW features): ', log_reg.score(BOW_stemmed_df, labels_training))
-print('Accuracy of logistic regression test (stemmed BOW features): ', log_reg.score(BOW_stemmed_test_df, labels_testing))
-
-# Build a logistic regression model and calculate the accuracy on Tfidf
-log_reg = LogisticRegression(C = 30).fit(Tfidf_df, labels_training)
-print('Accuracy of logistic regression (Tfidf features): ', log_reg.score(Tfidf_df, labels_training))
-print('Accuracy of logistic regression test (Tfidf features): ', log_reg.score(Tfidf_df_test, labels_testing))
-
-# Build a logistic regression model and calculate the accuracy on Tfidf stemmed
-log_reg = LogisticRegression(C = 30).fit(Tfidf_stemmed_df, labels_training)
-print('Accuracy of logistic regression (Tfidf Stemmed features): ', log_reg.score(Tfidf_stemmed_df, labels_training))
-print('Accuracy of logistic regression test (Tfidf Stemmed features): ', log_reg.score(Tfidf_stemmed_df_test, labels_testing))
-
+build_model(df_train_tfidf_unstem, df_train['Sentiment'], df_test_tfidf_unstem, df_test['Sentiment'], 'TFIDF Unstemmed')
+build_model(df_train_tfidf_stem, df_train['Sentiment'], df_test_tfidf_stem, df_test['Sentiment'], 'TFIDF Stemmed')
