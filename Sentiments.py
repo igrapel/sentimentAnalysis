@@ -90,7 +90,7 @@ def add_augmenting_features(df):
     return df
 
 def build_model(X_train, y_train, X_test, y_test, name_of_test):
-    log_reg = LogisticRegression(C=30).fit(X_train, y_train)
+    log_reg = LogisticRegression(C=30, max_iter=200).fit(X_train, y_train)
     y_pred = log_reg.predict(X_test)
     print('Training accuracy of '+name_of_test+': ', log_reg.score(X_train, y_train))
     print('Testing accuracy of '+name_of_test+': ', log_reg.score(X_test, y_test))
